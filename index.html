@@ -536,7 +536,7 @@
 <!-- TOAST -->
 <div id="toast">—</div>
 
-<script>
+<script type="module">
 // ── STATE ──────────────────────────────────────────────────
 const ADMIN_PASS = 'Ndowe123'; // cambiar en producción
 const STOCK_ALERT = 10;
@@ -567,6 +567,7 @@ const STORE_NAME = localStorage.getItem('sg_store') || 'Mi Almacén · España';
 function save() {
   localStorage.setItem('sg_items', JSON.stringify(state.items));
   localStorage.setItem('sg_shops', JSON.stringify(state.shops));
+  syncToFirebase();
 }
 
 // ── VIEWS ───────────────────────────────────────────────────
@@ -908,6 +909,40 @@ function escHtml(str) {
 document.getElementById('stock-modal').addEventListener('click', function(e) {
   if (e.target === this) closeModal();
 });
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAjjbT3COHuTlHCAXuiZ3T9oh3KcYyQC8w",
+  authDomain: "scango-pro.firebaseapp.com",
+  databaseURL: "https://scango-pro-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "scango-pro",
+  storageBucket: "scango-pro.firebasestorage.app",
+  messagingSenderId: "1046835596812",
+  appId: 
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const db = getDatabase(fbApp);
+const STORE_ID = localStorage.getItem('sg_store_id') || 'tienda-default';
+
+const itemsRef = ref(db, `stores/${STORE_ID}/items`);
+onValue(itemsRef, (snapshot) => {
+  const data = snapshot.val();
+  if (data) {
+    state.items = Object.values(data);
+    save();
+    renderInventario();
+  }
+});
+
+function syncToFirebase() {
+  const itemsObj = {};
+  state.items.forEach(i => { itemsObj[i.id] = i; });
+  set(ref(db, `stores/${STORE_ID}/items`), itemsObj)
+    .catch(err => console.error('Sync error:', err));
+}
 
 // ── INIT ─────────────────────────────────────────────────────
 renderInventario();
