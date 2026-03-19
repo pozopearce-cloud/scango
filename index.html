@@ -11,6 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
   <style>
     :root {
       --bg:#0a0a0a;--bg1:#111111;--bg2:#161616;--bg3:#1a1a1a;
@@ -231,7 +232,9 @@
     #cam-video{flex:1;object-fit:cover;width:100%;}
     .cam-controls{background:var(--bg1);padding:16px;display:flex;align-items:center;justify-content:space-between;}
     .cam-label{font-family:var(--mono);font-size:9px;color:var(--amber);text-transform:uppercase;letter-spacing:0.1em;}
-    .btn-capture{width:64px;height:64px;border-radius:50%;background:#fff;border:4px solid var(--bg3);cursor:pointer;}
+    .btn-capture{width:72px;height:72px;border-radius:50%;background:#fff;border:5px solid rgba(255,255,255,0.3);cursor:pointer;box-shadow:0 0 0 3px var(--amber);transition:transform 0.1s;}
+    .btn-capture:active{transform:scale(0.92);}
+    .scan-status{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.5);text-align:center;pointer-events:none;}
     .btn-cam-cancel{font-family:var(--mono);font-size:9px;color:var(--text2);background:none;border:none;cursor:pointer;padding:8px;}
     canvas#cam-canvas{display:none;}
     .view::-webkit-scrollbar{width:0;}
@@ -747,8 +750,14 @@ document.getElementById('lang-modal').addEventListener('click', function(e){ if(
 function checkRegistration() {
   const storeId = localStorage.getItem('sg_store_id');
   if (!storeId) {
-    document.getElementById('welcome-screen').style.display = 'flex';
-    document.getElementById('app').style.display = 'none';
+    // Intentar recuperar por teléfono guardado en cookie/sessionStorage
+    const savedPhone = sessionStorage.getItem('sg_phone_hint');
+    if (savedPhone) {
+      recoverByPhone(savedPhone);
+    } else {
+      document.getElementById('welcome-screen').style.display = 'flex';
+      document.getElementById('app').style.display = 'none';
+    }
   } else {
     document.getElementById('welcome-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
@@ -758,24 +767,78 @@ function checkRegistration() {
   applyLang();
 }
 
+function recoverByPhone(phone) {
+  // Buscar en Firebase todos los clientes con ese teléfono
+  onValue(ref(db,'clients'), (snap) => {
+    const data = snap.val();
+    if (!data) { showWelcome(); return; }
+    const clients = Object.values(data);
+    const match = clients.find(c => (c.phone||'').replace(/\s/g,'') === phone.replace(/\s/g,''));
+    if (match) {
+      // Restaurar localStorage con datos de Firebase
+      localStorage.setItem('sg_store_id', match.storeId);
+      localStorage.setItem('sg_store', `${match.name} · ${match.city}`);
+      localStorage.setItem('sg_reg_date', match.regDate||new Date().toISOString());
+      localStorage.setItem('sg_status', match.status||'trial');
+      localStorage.setItem('sg_lang', match.lang||'es');
+      document.getElementById('welcome-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'flex';
+      checkTrialStatus();
+      initFirebase(match.storeId);
+      toast('✓ Sesión recuperada');
+    } else {
+      showWelcome();
+    }
+  }, {onlyOnce: true});
+}
+
+function showWelcome() {
+  document.getElementById('welcome-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
 function registerStore() {
   const name = document.getElementById('reg-name').value.trim();
   const city = document.getElementById('reg-city').value.trim();
   const phone = document.getElementById('reg-phone').value.trim();
   const email = document.getElementById('reg-email').value.trim();
   if (!name||!city||!phone||!email) { toast(t('toastFirst')); return; }
-  const storeId = name.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').substring(0,20)+'-'+Date.now().toString().slice(-4);
-  const regDate = new Date().toISOString();
-  localStorage.setItem('sg_store_id', storeId);
-  localStorage.setItem('sg_store', `${name} · ${city}`);
-  localStorage.setItem('sg_reg_date', regDate);
-  localStorage.setItem('sg_status', 'trial');
-  localStorage.setItem('sg_lang', lang);
-  set(ref(db, `clients/${storeId}`), { name, city, phone, email, storeId, regDate, status:'trial', lang });
-  document.getElementById('welcome-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'flex';
-  checkTrialStatus(); initFirebase(storeId);
-  toast(t('toastWelcome') + name + ' ✓');
+
+  // Antes de crear, verificar si ya existe ese teléfono en Firebase
+  onValue(ref(db,'clients'), (snap) => {
+    const data = snap.val();
+    if (data) {
+      const clients = Object.values(data);
+      const existing = clients.find(c => (c.phone||'').replace(/\s/g,'') === phone.replace(/\s/g,''));
+      if (existing) {
+        // Ya existe — recuperar en lugar de crear nuevo
+        sessionStorage.setItem('sg_phone_hint', phone);
+        localStorage.setItem('sg_store_id', existing.storeId);
+        localStorage.setItem('sg_store', `${existing.name} · ${existing.city}`);
+        localStorage.setItem('sg_reg_date', existing.regDate||new Date().toISOString());
+        localStorage.setItem('sg_status', existing.status||'trial');
+        document.getElementById('welcome-screen').style.display = 'none';
+        document.getElementById('app').style.display = 'flex';
+        checkTrialStatus(); initFirebase(existing.storeId);
+        toast('✓ Tienda recuperada: ' + existing.name);
+        return;
+      }
+    }
+    // Nuevo registro
+    const storeId = name.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').substring(0,20)+'-'+Date.now().toString().slice(-4);
+    const regDate = new Date().toISOString();
+    sessionStorage.setItem('sg_phone_hint', phone);
+    localStorage.setItem('sg_store_id', storeId);
+    localStorage.setItem('sg_store', `${name} · ${city}`);
+    localStorage.setItem('sg_reg_date', regDate);
+    localStorage.setItem('sg_status', 'trial');
+    localStorage.setItem('sg_lang', lang);
+    set(ref(db, `clients/${storeId}`), { name, city, phone, email, storeId, regDate, status:'trial', lang });
+    document.getElementById('welcome-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    checkTrialStatus(); initFirebase(storeId);
+    toast(t('toastWelcome') + name + ' ✓');
+  }, {onlyOnce: true});
 }
 window.registerStore = registerStore;
 
@@ -1126,10 +1189,20 @@ function resetPhotoBoxes(){
   const bb=document.getElementById('box-barcode');bb.classList.remove('done');bb.innerHTML=`<div class="ph-icon">▣</div><div class="ph-lbl">${L.pbBarcode.replace('\n','<br>')}</div>`;
 }
 
-// ── CAMERA ───────────────────────────────────────────────────
+// ── CAMERA & SCANNER ─────────────────────────────────────────
 let camStream=null;
 let scanLoop=null;
 let scanLocked=false;
+let zxingReader=null;
+
+function getZXing(){
+  if(zxingReader) return zxingReader;
+  if(window.ZXing){
+    zxingReader=new ZXing.BrowserMultiFormatReader();
+    return zxingReader;
+  }
+  return null;
+}
 
 function openCamera(target){
   state.camTarget=target;
@@ -1143,11 +1216,12 @@ function openCamera(target){
     navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},audio:false})
       .then(stream=>{
         camStream=stream;
-        document.getElementById('cam-video').srcObject=stream;
+        const video=document.getElementById('cam-video');
+        video.srcObject=stream;
         document.getElementById('cam-modal').classList.add('open');
       })
       .catch(()=>toast(t('camCancel')));
-  }else toast('No camera');
+  } else toast('No camera');
 }
 window.openCamera=openCamera;
 
@@ -1160,41 +1234,53 @@ function openScannerCamera(){
   const hints={es:'Apunta al código de barras',zh:'对准条形码',en:'Point at the barcode',fr:'Pointez vers le code-barres'};
   document.getElementById('scan-hint-text').textContent=hints[lang]||hints.es;
   scanLocked=false;
-  if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){
-    navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},audio:false})
-      .then(stream=>{
-        camStream=stream;
-        document.getElementById('cam-video').srcObject=stream;
-        document.getElementById('cam-modal').classList.add('open');
+
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    toast('No camera'); return;
+  }
+
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},audio:false})
+    .then(stream=>{
+      camStream=stream;
+      const video=document.getElementById('cam-video');
+      video.srcObject=stream;
+      document.getElementById('cam-modal').classList.add('open');
+
+      video.onloadedmetadata=()=>{
+        // Intentar primero BarcodeDetector nativo (Chrome Android)
         if('BarcodeDetector' in window){
-          startScanLoop();
-        } else {
-          // Fallback: mostrar botón captura con aviso
+          startNativeScanLoop();
+        }
+        // Fallback: ZXing (funciona en Safari iOS)
+        else if(getZXing()){
+          startZXingScanLoop();
+        }
+        // Último recurso: botón manual
+        else {
           document.getElementById('btn-capture').style.display='flex';
           const noSupport={es:'Toca el botón para escanear',zh:'点击按钮扫描',en:'Tap button to scan',fr:'Appuyez pour scanner'};
           document.getElementById('scan-hint-text').textContent=noSupport[lang]||noSupport.es;
         }
-      })
-      .catch(()=>toast(t('camCancel')));
-  }else toast('No camera');
+      };
+    })
+    .catch(()=>toast(t('camCancel')));
 }
 window.openScannerCamera=openScannerCamera;
 
-function startScanLoop(){
+function startNativeScanLoop(){
   const detector=new BarcodeDetector({formats:['ean_13','ean_8','code_128','code_39','qr_code','upc_a','upc_e']});
   const video=document.getElementById('cam-video');
   const canvas=document.getElementById('cam-canvas');
   const ctx=canvas.getContext('2d');
   function tick(){
-    if(!camStream||scanLocked){return;}
+    if(!camStream||scanLocked) return;
     if(video.readyState===video.HAVE_ENOUGH_DATA){
-      canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+      canvas.width=video.videoWidth; canvas.height=video.videoHeight;
       ctx.drawImage(video,0,0);
       detector.detect(canvas).then(codes=>{
         if(codes.length&&!scanLocked){
           scanLocked=true;
-          const code=codes[0].rawValue;
-          onBarcodeDetected(code);
+          onBarcodeDetected(codes[0].rawValue);
         }
       }).catch(()=>{});
     }
@@ -1203,8 +1289,37 @@ function startScanLoop(){
   scanLoop=requestAnimationFrame(tick);
 }
 
+function startZXingScanLoop(){
+  const reader=getZXing();
+  if(!reader) return;
+  const video=document.getElementById('cam-video');
+  const canvas=document.getElementById('cam-canvas');
+  const ctx=canvas.getContext('2d');
+
+  function tick(){
+    if(!camStream||scanLocked) return;
+    if(video.readyState===video.HAVE_ENOUGH_DATA){
+      canvas.width=video.videoWidth||640;
+      canvas.height=video.videoHeight||480;
+      ctx.drawImage(video,0,0);
+      try{
+        const imageData=ctx.getImageData(0,0,canvas.width,canvas.height);
+        const luminanceSource=new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+        const binaryBitmap=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
+        const result=reader.decodeBitmap(binaryBitmap);
+        if(result&&!scanLocked){
+          scanLocked=true;
+          onBarcodeDetected(result.getText());
+          return;
+        }
+      } catch(e){ /* no code found, keep trying */ }
+    }
+    scanLoop=requestAnimationFrame(tick);
+  }
+  scanLoop=requestAnimationFrame(tick);
+}
+
 function onBarcodeDetected(code){
-  // Vibrar si está disponible
   if(navigator.vibrate) navigator.vibrate(120);
   const found=state.items.find(i=>(i.sku||'').trim()===code.trim());
   const banner=document.getElementById('scan-result-banner');
@@ -1225,7 +1340,6 @@ function onBarcodeDetected(code){
     text.textContent='⚠ '+(notFound[lang]||notFound.es)+code;
     setTimeout(()=>{
       closeCamera();
-      // Pre-rellenar el campo SKU en el formulario añadir
       document.getElementById('f-sku').value=code;
       switchView('anadir');
       toast(t('toastCode')+code);
@@ -1236,6 +1350,7 @@ function onBarcodeDetected(code){
 function closeCamera(){
   if(scanLoop){cancelAnimationFrame(scanLoop);scanLoop=null;}
   scanLocked=false;
+  if(zxingReader){try{zxingReader.reset();}catch(e){}}
   if(camStream){camStream.getTracks().forEach(tr=>tr.stop());camStream=null;}
   document.getElementById('cam-modal').classList.remove('open');
   document.getElementById('scan-overlay').style.display='none';
@@ -1246,7 +1361,7 @@ window.closeCamera=closeCamera;
 function capturePhoto(){
   const video=document.getElementById('cam-video');
   const canvas=document.getElementById('cam-canvas');
-  canvas.width=video.videoWidth||640;canvas.height=video.videoHeight||480;
+  canvas.width=video.videoWidth||640; canvas.height=video.videoHeight||480;
   canvas.getContext('2d').drawImage(video,0,0);
   const dataUrl=canvas.toDataURL('image/jpeg',0.7);
   if(state.camTarget==='merch'||state.camTarget==='merch-quick'){
@@ -1254,35 +1369,54 @@ function capturePhoto(){
     const box=document.getElementById('box-merch');
     if(box){box.classList.add('done');box.innerHTML=`<img src="${dataUrl}" alt="">`;}
     toast(t('toastPhoto'));
-  }else if(state.camTarget==='barcode'){
+    closeCamera();
+  } else if(state.camTarget==='barcode'){
     state.photos.barcode=dataUrl;
     const box=document.getElementById('box-barcode');
     if(box){box.classList.add('done');box.innerHTML=`<img src="${dataUrl}" alt="">`;}
-    tryReadBarcode(dataUrl);toast(t('toastPhoto'));
-  }else if(state.camTarget==='scanner'){
-    // Fallback: intento manual con foto
+    tryReadBarcode(dataUrl);
+    toast(t('toastPhoto'));
+    closeCamera();
+  } else if(state.camTarget==='scanner'){
     tryReadBarcode(dataUrl);
   }
-  if(state.camTarget!=='scanner') closeCamera();
 }
 window.capturePhoto=capturePhoto;
 
 function tryReadBarcode(dataUrl){
-  if(!('BarcodeDetector' in window))return;
   const img=new Image();
   img.onload=()=>{
-    const canvas=document.createElement('canvas');canvas.width=img.width;canvas.height=img.height;
+    const canvas=document.createElement('canvas');
+    canvas.width=img.width; canvas.height=img.height;
     canvas.getContext('2d').drawImage(img,0,0);
-    new BarcodeDetector({formats:['ean_13','ean_8','code_128','code_39','qr_code','upc_a','upc_e']})
-      .detect(canvas).then(codes=>{
-        if(codes.length){
-          const code=codes[0].rawValue;
+    // Intentar nativo primero
+    if('BarcodeDetector' in window){
+      new BarcodeDetector({formats:['ean_13','ean_8','code_128','code_39','qr_code','upc_a','upc_e']})
+        .detect(canvas).then(codes=>{
+          if(codes.length){
+            const code=codes[0].rawValue;
+            document.getElementById('f-sku').value=code;
+            toast(t('toastCode')+code);
+            if(state.camTarget==='scanner') onBarcodeDetected(code);
+          }
+        }).catch(()=>{});
+    }
+    // ZXing fallback
+    else if(getZXing()){
+      try{
+        const luminanceSource=new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+        const binaryBitmap=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
+        const result=getZXing().decodeBitmap(binaryBitmap);
+        if(result){
+          const code=result.getText();
           document.getElementById('f-sku').value=code;
           toast(t('toastCode')+code);
           if(state.camTarget==='scanner') onBarcodeDetected(code);
         }
-      }).catch(()=>{});
-  };img.src=dataUrl;
+      } catch(e){}
+    }
+  };
+  img.src=dataUrl;
 }
 
 function toast(msg){
