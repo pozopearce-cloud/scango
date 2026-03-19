@@ -10,6 +10,7 @@
   <title>Scan&amp;Go Pro</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     :root {
       --bg:#0a0a0a;--bg1:#111111;--bg2:#161616;--bg3:#1a1a1a;
@@ -45,6 +46,8 @@
     .badge-pill.live{border-color:#1a4a1a;color:var(--green);}
     .badge-pill.offline{border-color:#4a1a1a;color:var(--red);}
     .lang-btn{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;color:var(--text2);font-family:var(--mono);}
+    .btn-excel{background:#14401a;border:1px solid #1a5a22;border-radius:6px;padding:4px 9px;font-size:8px;font-weight:700;cursor:pointer;color:#22c55e;font-family:var(--mono);letter-spacing:0.06em;text-transform:uppercase;transition:background 0.15s;}
+    .btn-excel:active{background:#1a5a22;}
 
     /* TABS */
     .tabs{display:flex;background:var(--bg);border-bottom:1px solid var(--border);flex-shrink:0;}
@@ -199,6 +202,23 @@
     .phone-chip.linked{border-color:#1a4a1a;color:var(--green);background:var(--green-dim);}
     .phone-chip.add{border-style:dashed;color:var(--text3);cursor:pointer;}
     .btn-add-shop{width:100%;padding:12px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:0.1em;cursor:pointer;margin-top:4px;}
+
+    /* COBROS PANEL */
+    .cobros-block{background:#0d1a0d;border:1px solid #1a4a1a;border-radius:var(--radius);padding:14px;margin-bottom:12px;}
+    .cobros-title{font-size:8px;font-family:var(--mono);color:var(--green);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+    .cobros-badge{background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:8px;font-weight:700;}
+    .cobro-row{background:var(--bg1);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;}
+    .cobro-info{flex:1;min-width:0;}
+    .cobro-name{font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .cobro-meta{font-size:8px;color:var(--text3);font-family:var(--mono);margin-top:2px;}
+    .cobro-days{font-family:var(--mono);font-size:10px;font-weight:700;flex-shrink:0;text-align:right;}
+    .cobro-days.overdue{color:var(--red);}
+    .cobro-days.soon{color:var(--amber);}
+    .cobro-days.ok{color:var(--green);}
+    .btn-wa{background:#1a3a1a;border:1px solid #22c55e44;border-radius:8px;padding:7px 10px;font-size:14px;cursor:pointer;flex-shrink:0;transition:background 0.15s;}
+    .btn-wa:active{background:#22431a;}
+    .cobros-empty{font-size:11px;color:var(--text3);text-align:center;padding:10px 0;font-family:var(--mono);}
+    .renewal-input{background:none;border:none;outline:none;color:var(--text2);font-family:var(--mono);font-size:8px;cursor:pointer;text-decoration:underline dotted;}
     .admin-login{display:flex;flex-direction:column;align-items:center;justify-content:center;height:80%;gap:16px;padding:24px;}
     .login-title{font-family:var(--mono);font-size:11px;color:var(--amber);text-transform:uppercase;letter-spacing:0.1em;}
     .login-input{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:12px 14px;color:var(--text);font-family:var(--mono);font-size:12px;outline:none;}
@@ -215,6 +235,23 @@
     .btn-cam-cancel{font-family:var(--mono);font-size:9px;color:var(--text2);background:none;border:none;cursor:pointer;padding:8px;}
     canvas#cam-canvas{display:none;}
     .view::-webkit-scrollbar{width:0;}
+
+    /* SCANNER OVERLAY */
+    .scan-overlay{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;}
+    .scan-frame{width:72%;max-width:280px;height:160px;position:relative;}
+    .scan-frame::before,.scan-frame::after{content:'';position:absolute;width:28px;height:28px;border-color:var(--amber);border-style:solid;}
+    .scan-frame::before{top:0;left:0;border-width:3px 0 0 3px;border-radius:4px 0 0 0;}
+    .scan-frame::after{top:0;right:0;border-width:3px 3px 0 0;border-radius:0 4px 0 0;}
+    .scan-frame .corner-bl,.scan-frame .corner-br{position:absolute;width:28px;height:28px;border-color:var(--amber);border-style:solid;}
+    .scan-frame .corner-bl{bottom:0;left:0;border-width:0 0 3px 3px;border-radius:0 0 0 4px;}
+    .scan-frame .corner-br{bottom:0;right:0;border-width:0 3px 3px 0;border-radius:0 0 4px 0;}
+    .scan-line{position:absolute;left:6%;right:6%;height:2px;background:linear-gradient(90deg,transparent,var(--amber),transparent);animation:scanMove 1.8s ease-in-out infinite;top:50%;}
+    @keyframes scanMove{0%,100%{top:15%;}50%{top:82%;}}
+    .scan-hint{position:absolute;bottom:16px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:9px;color:rgba(255,255,255,0.6);letter-spacing:0.08em;}
+    .scan-result-banner{position:absolute;top:0;left:0;right:0;padding:14px 16px;background:rgba(34,197,94,0.15);border-bottom:1px solid var(--green);display:none;align-items:center;justify-content:center;gap:8px;}
+    .scan-result-banner.show{display:flex;}
+    .scan-result-banner.notfound{background:rgba(239,68,68,0.15);border-bottom-color:var(--red);}
+    .scan-result-text{font-family:var(--mono);font-size:10px;color:#fff;text-align:center;}
   </style>
 </head>
 <body>
@@ -260,7 +297,7 @@
     <input class="activation-input" id="activation-code" type="text" placeholder="XXXX-XXXX" maxlength="9"/>
     <button class="btn-activate-confirm" onclick="confirmActivation()" id="at-btn">ACTIVAR</button>
     <button class="btn-activate-cancel" onclick="closeActivationModal()" id="at-cancel">Ahora no</button>
-    <div class="activation-contact" id="at-contact">¿No tienes código? <a href="mailto:info@scan-go.app">info@scan-go.app</a></div>
+    <div class="activation-contact" id="at-contact">¿No tienes código? <a href="/cdn-cgi/l/email-protection#b9d0d7dfd6f9cadad8d794ded697d8c9c9"><span class="__cf_email__" data-cfemail="224b4c444d625141434c0f454d0c435252">[email&#160;protected]</span></a></div>
   </div>
 </div>
 
@@ -278,6 +315,7 @@
         <div class="store-name" id="store-name-display">📍 Cargando...</div>
       </div>
       <div class="topbar-right">
+        <button class="btn-excel" onclick="exportExcel()" id="btn-excel">📊 Excel</button>
         <button class="lang-btn" id="lang-flag-btn" onclick="openLangModal()">🇪🇸</button>
         <div class="badge-pill" id="phones-badge">🔗 —</div>
         <div class="badge-pill live" id="sync-badge">● LIVE</div>
@@ -353,6 +391,13 @@
             <div class="rev-val" id="rev-val">0€</div>
             <div class="rev-sub" id="rev-sub">0 activos · 150€/año</div>
           </div>
+
+          <!-- PANEL COBROS -->
+          <div class="cobros-block">
+            <div class="cobros-title">📲 <span id="cobros-title-text">Cobros pendientes</span> <span class="cobros-badge" id="cobros-count" style="display:none">0</span></div>
+            <div id="cobros-list"><div class="cobros-empty" id="cobros-empty-text">✓ Todo al día</div></div>
+          </div>
+
           <div class="section-label" id="sl-clients">Clientes registrados</div>
           <div id="shops-list"></div>
           <div class="section-label" style="margin-top:16px;" id="sl-manual">Tiendas manuales</div>
@@ -389,17 +434,27 @@
 
 <div id="cam-modal">
   <video id="cam-video" autoplay playsinline muted></video>
+  <div class="scan-overlay" id="scan-overlay" style="display:none;">
+    <div class="scan-frame">
+      <div class="corner-bl"></div><div class="corner-br"></div>
+      <div class="scan-line"></div>
+    </div>
+  </div>
+  <div class="scan-result-banner" id="scan-result-banner">
+    <span class="scan-result-text" id="scan-result-text"></span>
+  </div>
+  <div class="scan-hint" id="scan-hint-text"></div>
   <canvas id="cam-canvas"></canvas>
   <div class="cam-controls">
     <button class="btn-cam-cancel" onclick="closeCamera()" id="cam-cancel">Cancelar</button>
     <div class="cam-label" id="cam-label">Foto mercancía</div>
-    <button class="btn-capture" onclick="capturePhoto()"></button>
+    <button class="btn-capture" id="btn-capture" onclick="capturePhoto()"></button>
   </div>
 </div>
 
 <div id="toast">—</div>
 
-<script type="module">
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
@@ -448,6 +503,14 @@ const T = {
     available:'DISP.', outOfStock:'AGOT.', units:'uds.', activateBtn:'✓ Activar',
     noClients:'Aún no hay clientes registrados.', camMerch:'Foto de mercancía',
     camBarcode:'Foto de código de barras', camQuick:'Foto rápida',
+    excelBtn:'📊 Excel', excelSheet:'Inventario', excelName:'Nombre', excelPrice:'Precio (€)',
+    excelSku:'Cód. Barras', excelCat:'Categoría', excelStock:'Stock', excelLow:'Stock bajo',
+    excelYes:'Sí', excelNo:'No', excelToast:'Excel exportado ✓', excelEmpty:'No hay artículos para exportar',
+    cobrosPending:'Cobros pendientes', cobrosOk:'✓ Todo al día',
+    cobrosOverdue:'Vencido hace {n} días', cobrosSoon:'Vence en {n} días',
+    cobrosToday:'Vence hoy',
+    waMsg:'Hola {name}, te escribimos desde Scan&Go. Tu suscripción anual vence el {date}. Para renovar contacta con nosotros. ¡Gracias!',
+    setRenewal:'Fecha renovación (YYYY-MM-DD):',
   },
   zh: {
     tagline:'小型仓库库存管理', trial:'免费试用 · 30天无需承诺',
@@ -479,6 +542,14 @@ const T = {
     available:'有货', outOfStock:'缺货', units:'件', activateBtn:'✓ 激活',
     noClients:'暂无注册客户。', camMerch:'商品照片',
     camBarcode:'条码照片', camQuick:'快速拍照',
+    excelBtn:'📊 Excel', excelSheet:'库存', excelName:'名称', excelPrice:'价格 (€)',
+    excelSku:'条形码', excelCat:'类别', excelStock:'库存', excelLow:'库存不足',
+    excelYes:'是', excelNo:'否', excelToast:'Excel已导出 ✓', excelEmpty:'没有可导出的商品',
+    cobrosPending:'待收款', cobrosOk:'✓ 全部正常',
+    cobrosOverdue:'已逾期{n}天', cobrosSoon:'{n}天后到期',
+    cobrosToday:'今天到期',
+    waMsg:'您好{name}，这里是Scan&Go。您的年度订阅将于{date}到期。请联系我们续订。谢谢！',
+    setRenewal:'续订日期 (YYYY-MM-DD):',
   },
   en: {
     tagline:'Inventory management for your business', trial:'Free trial · 30 days no commitment',
@@ -510,6 +581,14 @@ const T = {
     available:'AVAIL.', outOfStock:'OUT', units:'units', activateBtn:'✓ Activate',
     noClients:'No registered clients yet.', camMerch:'Product photo',
     camBarcode:'Barcode photo', camQuick:'Quick photo',
+    excelBtn:'📊 Excel', excelSheet:'Inventory', excelName:'Name', excelPrice:'Price (€)',
+    excelSku:'Barcode', excelCat:'Category', excelStock:'Stock', excelLow:'Low stock',
+    excelYes:'Yes', excelNo:'No', excelToast:'Excel exported ✓', excelEmpty:'No items to export',
+    cobrosPending:'Pending payments', cobrosOk:'✓ All up to date',
+    cobrosOverdue:'Overdue by {n} days', cobrosSoon:'Due in {n} days',
+    cobrosToday:'Due today',
+    waMsg:'Hi {name}, this is Scan&Go. Your annual subscription expires on {date}. Please contact us to renew. Thank you!',
+    setRenewal:'Renewal date (YYYY-MM-DD):',
   },
   fr: {
     tagline:'Gestion des stocks pour votre commerce', trial:'Essai gratuit · 30 jours sans engagement',
@@ -541,6 +620,14 @@ const T = {
     available:'DISP.', outOfStock:'ÉPUISÉ', units:'unités', activateBtn:'✓ Activer',
     noClients:'Aucun client enregistré.', camMerch:'Photo de la marchandise',
     camBarcode:'Photo du code-barres', camQuick:'Photo rapide',
+    excelBtn:'📊 Excel', excelSheet:'Inventaire', excelName:'Nom', excelPrice:'Prix (€)',
+    excelSku:'Code-barres', excelCat:'Catégorie', excelStock:'Stock', excelLow:'Stock faible',
+    excelYes:'Oui', excelNo:'Non', excelToast:'Excel exporté ✓', excelEmpty:'Aucun article à exporter',
+    cobrosPending:'Paiements en attente', cobrosOk:'✓ Tout à jour',
+    cobrosOverdue:'En retard de {n} jours', cobrosSoon:'Échéance dans {n} jours',
+    cobrosToday:'Échéance aujourd\'hui',
+    waMsg:'Bonjour {name}, ici Scan&Go. Votre abonnement annuel expire le {date}. Contactez-nous pour renouveler. Merci !',
+    setRenewal:'Date de renouvellement (YYYY-MM-DD):',
   }
 };
 
@@ -620,6 +707,9 @@ function applyLang() {
   document.getElementById('tb-btn').textContent = L.tbBtn;
   // flag button
   document.getElementById('lang-flag-btn').textContent = FLAGS[lang];
+  // excel button
+  const excelBtn = document.getElementById('btn-excel');
+  if (excelBtn) excelBtn.textContent = L.excelBtn || '📊 Excel';
   // lang options active
   ['es','zh','en','fr'].forEach(l => {
     document.getElementById('lo-'+l).classList.toggle('active', l === lang);
@@ -804,12 +894,21 @@ function renderAdmin() {
   }
   document.getElementById('admin-login-screen').style.display='none';
   document.getElementById('admin-panel').style.display='block';
+
+  // Traducciones panel cobros
+  document.getElementById('cobros-title-text').textContent = t('cobrosPending');
+  document.getElementById('cobros-empty-text').textContent = t('cobrosOk');
+
   onValue(ref(db,'clients'), (snap) => {
     const data = snap.val();
     const clients = data ? Object.values(data) : [];
     const active = clients.filter(c=>c.status==='active').length;
     document.getElementById('rev-val').textContent = (active*150).toLocaleString('es-ES')+'€';
     document.getElementById('rev-sub').textContent = `${active} ${t('statusActive').toLowerCase()} · ${clients.length} ${t('slClients').toLowerCase()} · 150€/año`;
+
+    // Render cobros desde Firebase clients
+    renderCobros(clients, []);
+
     document.getElementById('shops-list').innerHTML = clients.length===0
       ? `<div style="font-size:12px;color:var(--text3);padding:12px 0;">${t('noClients')}</div>`
       : clients.map(c=>`
@@ -824,13 +923,111 @@ function renderAdmin() {
           </div>
         </div>`).join('');
   }, {onlyOnce:true});
+
   const sl={active:'active',expired:'expired',trial:'trial'};
   document.getElementById('manual-shops-list').innerHTML = state.shops.map(s=>`
     <div class="shop-card">
-      <div class="shop-header"><div><div class="shop-name-text">${escHtml(s.name)}</div><div class="shop-meta">${s.renewal}</div></div><span class="status-badge ${sl[s.status]}">${t('status'+s.status.charAt(0).toUpperCase()+s.status.slice(1))}</span></div>
+      <div class="shop-header"><div><div class="shop-name-text">${escHtml(s.name)}</div>
+      <div class="shop-meta">
+        <input class="renewal-input" value="${escHtml(s.renewal||'—')}" onblur="updateRenewal('${s.id}',this.value)" onclick="this.select()" title="${t('setRenewal')}"/>
+      </div></div><span class="status-badge ${sl[s.status]||'trial'}">${t('status'+s.status.charAt(0).toUpperCase()+s.status.slice(1))}</span></div>
       <div class="phones-row">${s.phones.map(p=>`<div class="phone-chip linked">📱 ${escHtml(p)}</div>`).join('')}${s.phones.length<3?`<div class="phone-chip add" onclick="addPhone('${s.id}')">+</div>`:''}</div>
     </div>`).join('');
+
+  // Render cobros incluyendo tiendas manuales
+  setTimeout(()=>{ renderCobros([], state.shops); }, 100);
 }
+
+function renderCobros(fbClients, manualShops) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const WARN_DAYS = 15; // avisar si vence en ≤15 días
+  const entries = [];
+
+  // Firebase clients con fecha de registro + 1 año
+  fbClients.forEach(c => {
+    if (!c.regDate) return;
+    const renewal = new Date(c.regDate);
+    renewal.setFullYear(renewal.getFullYear() + 1);
+    renewal.setHours(0,0,0,0);
+    const diff = Math.round((renewal - today) / 86400000);
+    if (diff <= WARN_DAYS) entries.push({ name: c.name, phone: c.phone, renewal, diff, id: c.storeId, type:'fb' });
+  });
+
+  // Tiendas manuales con campo renewal
+  manualShops.forEach(s => {
+    if (!s.renewal || s.renewal === '—') return;
+    const renewal = new Date(s.renewal);
+    if (isNaN(renewal)) return;
+    renewal.setHours(0,0,0,0);
+    const diff = Math.round((renewal - today) / 86400000);
+    if (diff <= WARN_DAYS) {
+      const phone = s.phones && s.phones[0] ? s.phones[0] : '';
+      entries.push({ name: s.name, phone, renewal, diff, id: s.id, type:'manual' });
+    }
+  });
+
+  // Ordenar: más urgentes primero
+  entries.sort((a,b) => a.diff - b.diff);
+
+  const badge = document.getElementById('cobros-count');
+  const list = document.getElementById('cobros-list');
+
+  if (!entries.length) {
+    badge.style.display = 'none';
+    list.innerHTML = `<div class="cobros-empty">${t('cobrosOk')}</div>`;
+    return;
+  }
+
+  badge.style.display = 'inline';
+  badge.textContent = entries.length;
+
+  list.innerHTML = entries.map(e => {
+    const dateStr = e.renewal.toLocaleDateString('es-ES');
+    let daysLabel, daysClass;
+    if (e.diff < 0) {
+      daysLabel = t('cobrosOverdue', {n: Math.abs(e.diff)});
+      daysClass = 'overdue';
+    } else if (e.diff === 0) {
+      daysLabel = t('cobrosToday');
+      daysClass = 'overdue';
+    } else {
+      daysLabel = t('cobrosSoon', {n: e.diff});
+      daysClass = e.diff <= 7 ? 'overdue' : 'soon';
+    }
+
+    const waPhone = (e.phone||'').replace(/[^0-9+]/g,'');
+    const waText = encodeURIComponent(
+      t('waMsg').replace('{name}', e.name).replace('{date}', dateStr)
+    );
+    const waUrl = waPhone ? `https://wa.me/${waPhone}?text=${waText}` : '';
+
+    return `<div class="cobro-row">
+      <div class="cobro-info">
+        <div class="cobro-name">${escHtml(e.name)}</div>
+        <div class="cobro-meta">${escHtml(e.phone||'—')} · ${dateStr}</div>
+      </div>
+      <div class="cobro-days ${daysClass}">${daysLabel}</div>
+      ${waPhone ? `<a href="${waUrl}" target="_blank" class="btn-wa" title="WhatsApp">📲</a>` : '<div style="width:36px"></div>'}
+    </div>`;
+  }).join('');
+}
+window.renderCobros = renderCobros;
+
+function updateRenewal(shopId, val) {
+  const shop = state.shops.find(s => s.id === shopId);
+  if (!shop) return;
+  shop.renewal = val.trim();
+  // Auto-actualizar estado según fecha
+  if (val && val !== '—') {
+    const d = new Date(val); d.setHours(0,0,0,0);
+    const today = new Date(); today.setHours(0,0,0,0);
+    const diff = Math.round((d - today) / 86400000);
+    shop.status = diff < 0 ? 'expired' : 'active';
+  }
+  save();
+  renderAdmin();
+}
+window.updateRenewal = updateRenewal;
 
 function activateClient(storeId) {
   set(ref(db,`clients/${storeId}/status`),'active');
@@ -894,9 +1091,8 @@ function adjustSelected(v){
 window.adjustSelected=adjustSelected;
 
 function simulateScan(){
-  if(!state.items.length){toast(t('toastFirst'));return;}
-  toast(t('toastScan'));
-  setTimeout(()=>{const r=state.items[Math.floor(Math.random()*state.items.length)];state.selectedId=r.id;renderInventario();toast(t('toastDetected')+r.name);},800);
+  // Ahora lanza el escáner real en lugar de simular
+  openScannerCamera();
 }
 window.simulateScan=simulateScan;
 
@@ -932,21 +1128,118 @@ function resetPhotoBoxes(){
 
 // ── CAMERA ───────────────────────────────────────────────────
 let camStream=null;
+let scanLoop=null;
+let scanLocked=false;
+
 function openCamera(target){
   state.camTarget=target;
   const labels={merch:t('camMerch'),barcode:t('camBarcode'),'merch-quick':t('camQuick')};
   document.getElementById('cam-label').textContent=labels[target]||'';
+  document.getElementById('scan-overlay').style.display='none';
+  document.getElementById('scan-result-banner').classList.remove('show','notfound');
+  document.getElementById('scan-hint-text').textContent='';
+  document.getElementById('btn-capture').style.display='flex';
   if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){
-    navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false})
-      .then(stream=>{camStream=stream;document.getElementById('cam-video').srcObject=stream;document.getElementById('cam-modal').classList.add('open');})
+    navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},audio:false})
+      .then(stream=>{
+        camStream=stream;
+        document.getElementById('cam-video').srcObject=stream;
+        document.getElementById('cam-modal').classList.add('open');
+      })
       .catch(()=>toast(t('camCancel')));
   }else toast('No camera');
 }
 window.openCamera=openCamera;
 
+function openScannerCamera(){
+  state.camTarget='scanner';
+  document.getElementById('cam-label').textContent=t('scanBtn');
+  document.getElementById('scan-overlay').style.display='flex';
+  document.getElementById('scan-result-banner').classList.remove('show','notfound');
+  document.getElementById('btn-capture').style.display='none';
+  const hints={es:'Apunta al código de barras',zh:'对准条形码',en:'Point at the barcode',fr:'Pointez vers le code-barres'};
+  document.getElementById('scan-hint-text').textContent=hints[lang]||hints.es;
+  scanLocked=false;
+  if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){
+    navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},audio:false})
+      .then(stream=>{
+        camStream=stream;
+        document.getElementById('cam-video').srcObject=stream;
+        document.getElementById('cam-modal').classList.add('open');
+        if('BarcodeDetector' in window){
+          startScanLoop();
+        } else {
+          // Fallback: mostrar botón captura con aviso
+          document.getElementById('btn-capture').style.display='flex';
+          const noSupport={es:'Toca el botón para escanear',zh:'点击按钮扫描',en:'Tap button to scan',fr:'Appuyez pour scanner'};
+          document.getElementById('scan-hint-text').textContent=noSupport[lang]||noSupport.es;
+        }
+      })
+      .catch(()=>toast(t('camCancel')));
+  }else toast('No camera');
+}
+window.openScannerCamera=openScannerCamera;
+
+function startScanLoop(){
+  const detector=new BarcodeDetector({formats:['ean_13','ean_8','code_128','code_39','qr_code','upc_a','upc_e']});
+  const video=document.getElementById('cam-video');
+  const canvas=document.getElementById('cam-canvas');
+  const ctx=canvas.getContext('2d');
+  function tick(){
+    if(!camStream||scanLocked){return;}
+    if(video.readyState===video.HAVE_ENOUGH_DATA){
+      canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+      ctx.drawImage(video,0,0);
+      detector.detect(canvas).then(codes=>{
+        if(codes.length&&!scanLocked){
+          scanLocked=true;
+          const code=codes[0].rawValue;
+          onBarcodeDetected(code);
+        }
+      }).catch(()=>{});
+    }
+    scanLoop=requestAnimationFrame(tick);
+  }
+  scanLoop=requestAnimationFrame(tick);
+}
+
+function onBarcodeDetected(code){
+  // Vibrar si está disponible
+  if(navigator.vibrate) navigator.vibrate(120);
+  const found=state.items.find(i=>(i.sku||'').trim()===code.trim());
+  const banner=document.getElementById('scan-result-banner');
+  const text=document.getElementById('scan-result-text');
+  if(found){
+    banner.classList.remove('notfound');
+    banner.classList.add('show');
+    text.textContent='✓ '+found.name+' · '+found.stock+' '+t('units');
+    setTimeout(()=>{
+      closeCamera();
+      state.selectedId=found.id;
+      renderInventario();
+      toast(t('toastDetected')+found.name);
+    },900);
+  } else {
+    banner.classList.add('show','notfound');
+    const notFound={es:'Código no encontrado: ',zh:'未找到条码：',en:'Code not found: ',fr:'Code introuvable : '};
+    text.textContent='⚠ '+(notFound[lang]||notFound.es)+code;
+    setTimeout(()=>{
+      closeCamera();
+      // Pre-rellenar el campo SKU en el formulario añadir
+      document.getElementById('f-sku').value=code;
+      switchView('anadir');
+      toast(t('toastCode')+code);
+    },1200);
+  }
+}
+
 function closeCamera(){
-  if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
+  if(scanLoop){cancelAnimationFrame(scanLoop);scanLoop=null;}
+  scanLocked=false;
+  if(camStream){camStream.getTracks().forEach(tr=>tr.stop());camStream=null;}
   document.getElementById('cam-modal').classList.remove('open');
+  document.getElementById('scan-overlay').style.display='none';
+  document.getElementById('scan-result-banner').classList.remove('show','notfound');
 }
 window.closeCamera=closeCamera;
 
@@ -966,8 +1259,11 @@ function capturePhoto(){
     const box=document.getElementById('box-barcode');
     if(box){box.classList.add('done');box.innerHTML=`<img src="${dataUrl}" alt="">`;}
     tryReadBarcode(dataUrl);toast(t('toastPhoto'));
+  }else if(state.camTarget==='scanner'){
+    // Fallback: intento manual con foto
+    tryReadBarcode(dataUrl);
   }
-  closeCamera();
+  if(state.camTarget!=='scanner') closeCamera();
 }
 window.capturePhoto=capturePhoto;
 
@@ -977,8 +1273,15 @@ function tryReadBarcode(dataUrl){
   img.onload=()=>{
     const canvas=document.createElement('canvas');canvas.width=img.width;canvas.height=img.height;
     canvas.getContext('2d').drawImage(img,0,0);
-    new BarcodeDetector({formats:['ean_13','ean_8','code_128','qr_code']})
-      .detect(canvas).then(codes=>{if(codes.length){document.getElementById('f-sku').value=codes[0].rawValue;toast(t('toastCode')+codes[0].rawValue);}}).catch(()=>{});
+    new BarcodeDetector({formats:['ean_13','ean_8','code_128','code_39','qr_code','upc_a','upc_e']})
+      .detect(canvas).then(codes=>{
+        if(codes.length){
+          const code=codes[0].rawValue;
+          document.getElementById('f-sku').value=code;
+          toast(t('toastCode')+code);
+          if(state.camTarget==='scanner') onBarcodeDetected(code);
+        }
+      }).catch(()=>{});
   };img.src=dataUrl;
 }
 
@@ -987,18 +1290,47 @@ function toast(msg){
   clearTimeout(toast._t);toast._t=setTimeout(()=>el.classList.remove('show'),2200);
 }
 
+// ── EXPORT EXCEL ─────────────────────────────────────────────
+function exportExcel() {
+  if (!state.items.length) { toast(t('excelEmpty')); return; }
+  const storeName = localStorage.getItem('sg_store') || 'inventario';
+  const headers = [t('excelName'), t('excelPrice'), t('excelSku'), t('excelCat'), t('excelStock'), t('excelLow')];
+  const rows = state.items.map(i => [
+    i.name,
+    parseFloat(i.price).toFixed(2),
+    i.sku || '',
+    i.cat || '',
+    i.stock,
+    i.stock < STOCK_ALERT ? t('excelYes') : t('excelNo')
+  ]);
+  const wsData = [headers, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  // Column widths
+  ws['!cols'] = [
+    { wch: 30 }, // Nombre
+    { wch: 12 }, // Precio
+    { wch: 18 }, // Barcode
+    { wch: 16 }, // Categoría
+    { wch: 10 }, // Stock
+    { wch: 14 }, // Stock bajo
+  ];
+  // Style header row bold (via cell metadata)
+  headers.forEach((_, ci) => {
+    const cellRef = XLSX.utils.encode_cell({ r: 0, c: ci });
+    if (ws[cellRef]) ws[cellRef].s = { font: { bold: true }, fill: { fgColor: { rgb: 'F59E0B' } } };
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, t('excelSheet'));
+  const date = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `${storeName}_${date}.xlsx`);
+  toast(t('excelToast'));
+}
+window.exportExcel = exportExcel;
+
+
 function escHtml(str){
   if(!str)return'';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-document.getElementById('stock-modal').addEventListener('click',function(e){if(e.target===this)closeModal();});
-
-checkRegistration();
-
-if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
-}
-</script>
-</body>
-</html>
+document.getElementById('stock-modal').addEventListener('
