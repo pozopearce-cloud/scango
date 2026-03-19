@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
     :root {
       --bg:#0a0a0a;--bg1:#111111;--bg2:#161616;--bg3:#1a1a1a;
@@ -457,10 +457,9 @@
 
 <div id="toast">—</div>
 
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script>
 const firebaseConfig = {
   apiKey: "AIzaSyAjjbT3COHuTlHCAXuiZ3T9oh3KcYyQC8w",
   authDomain: "scango-pro.firebaseapp.com",
@@ -471,8 +470,11 @@ const firebaseConfig = {
   appId: "1:1046835596812:web:cd388ae5d58d1363bd2829"
 };
 
-const fbApp = initializeApp(firebaseConfig);
-const db = getDatabase(fbApp);
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+function ref(path){ return db.ref(path); }
+function onValue(r, cb, opts){ if(opts&&opts.onlyOnce){ r.once('value').then(cb).catch(()=>cb({val:()=>null})); } else { r.on('value', cb, ()=>cb({val:()=>null})); } }
+function set(r, val){ return r.set(val); }
 
 // ── TRANSLATIONS ─────────────────────────────────────────────
 const T = {
@@ -1193,15 +1195,223 @@ function resetPhotoBoxes(){
 let camStream=null;
 let scanLoop=null;
 let scanLocked=false;
-let zxingReader=null;
+let html5Scanner=null;
 
-function getZXing(){
-  if(zxingReader) return zxingReader;
-  if(window.ZXing){
-    zxingReader=new ZXing.BrowserMultiFormatReader();
-    return zxingReader;
+function openCamera(target){
+  state.camTarget=target;
+  const labels={merch:t('camMerch'),barcode:t('camBarcode'),'merch-quick':t('camQuick')};
+  document.getElementById('cam-label').textContent=labels[target]||'';
+  document.getElementById('scan-overlay').style.display='none';
+  document.getElementById('scan-result-banner').classList.remove('show','notfound');
+  document.getElementById('scan-hint-text').textContent='';
+  document.getElementById('btn-capture').style.display='flex';
+  if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){
+    navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},audio:false})
+      .then(stream=>{
+        camStream=stream;
+        document.getElementById('cam-video').srcObject=stream;
+        document.getElementById('cam-modal').classList.add('open');
+      })
+      .catch(()=>toast(t('camCancel')));
+  } else toast('No camera');
+}
+window.openCamera=openCamera;
+
+function openScannerCamera(){
+  state.camTarget='scanner';
+  scanLocked=false;
+
+  // Usar html5-qrcode si está disponible (funciona en iOS Safari y Android Chrome)
+  if(window.Html5Qrcode){
+    startHtml5QrScanner();
+    return;
   }
-  return null;
+
+  // Fallback nativo BarcodeDetector (Chrome Android)
+  document.getElementById('cam-label').textContent=t('scanBtn');
+  document.getElementById('scan-overlay').style.display='flex';
+  document.getElementById('scan-result-banner').classList.remove('show','notfound');
+  document.getElementById('btn-capture').style.display='none';
+  const hints={es:'Apunta al código de barras',zh:'对准条形码',en:'Point at the barcode',fr:'Pointez vers le code-barres'};
+  document.getElementById('scan-hint-text').textContent=hints[lang]||hints.es;
+
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){toast('No camera');return;}
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},audio:false})
+    .then(stream=>{
+      camStream=stream;
+      document.getElementById('cam-video').srcObject=stream;
+      document.getElementById('cam-modal').classList.add('open');
+      if('BarcodeDetector' in window){
+        startNativeScanLoop();
+      } else {
+        document.getElementById('btn-capture').style.display='flex';
+        const noSupport={es:'Toca para escanear',zh:'点击扫描',en:'Tap to scan',fr:'Appuyer pour scanner'};
+        document.getElementById('scan-hint-text').textContent=noSupport[lang]||noSupport.es;
+      }
+    })
+    .catch(()=>toast(t('camCancel')));
+}
+window.openScannerCamera=openScannerCamera;
+
+function startHtml5QrScanner(){
+  // Ocultar modal de cámara propio y usar el de html5-qrcode
+  document.getElementById('cam-modal').classList.remove('open');
+
+  // Crear contenedor temporal si no existe
+  let scanDiv = document.getElementById('html5qr-container');
+  if(!scanDiv){
+    scanDiv = document.createElement('div');
+    scanDiv.id='html5qr-container';
+    scanDiv.style.cssText='position:fixed;inset:0;background:#000;z-index:250;display:flex;flex-direction:column;';
+    // Botón cancelar
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = t('camCancel');
+    cancelBtn.style.cssText='position:absolute;top:16px;left:16px;background:none;border:none;color:#fff;font-family:monospace;font-size:14px;z-index:260;cursor:pointer;padding:8px;';
+    cancelBtn.onclick = closeHtml5Scanner;
+    // Div para el escáner
+    const readerDiv = document.createElement('div');
+    readerDiv.id='html5qr-reader';
+    readerDiv.style.cssText='width:100%;flex:1;';
+    scanDiv.appendChild(cancelBtn);
+    scanDiv.appendChild(readerDiv);
+    document.body.appendChild(scanDiv);
+  }
+  scanDiv.style.display='flex';
+
+  html5Scanner = new Html5Qrcode('html5qr-reader');
+  const config = {fps:10, qrbox:{width:250,height:150}, aspectRatio:1.7};
+  html5Scanner.start(
+    {facingMode:'environment'},
+    config,
+    (code)=>{
+      if(!scanLocked){
+        scanLocked=true;
+        closeHtml5Scanner();
+        onBarcodeDetected(code);
+      }
+    },
+    ()=>{}
+  ).catch(()=>{
+    closeHtml5Scanner();
+    toast(t('camCancel'));
+  });
+}
+
+function closeHtml5Scanner(){
+  if(html5Scanner){
+    html5Scanner.stop().catch(()=>{});
+    html5Scanner=null;
+  }
+  const scanDiv=document.getElementById('html5qr-container');
+  if(scanDiv) scanDiv.style.display='none';
+  scanLocked=false;
+}
+
+function startNativeScanLoop(){
+  const detector=new BarcodeDetector({formats:['ean_13','ean_8','code_128','code_39','qr_code','upc_a','upc_e']});
+  const video=document.getElementById('cam-video');
+  const canvas=document.getElementById('cam-canvas');
+  const ctx=canvas.getContext('2d');
+  function tick(){
+    if(!camStream||scanLocked) return;
+    if(video.readyState===video.HAVE_ENOUGH_DATA){
+      canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+      ctx.drawImage(video,0,0);
+      detector.detect(canvas).then(codes=>{
+        if(codes.length&&!scanLocked){
+          scanLocked=true;
+          onBarcodeDetected(codes[0].rawValue);
+        }
+      }).catch(()=>{});
+    }
+    scanLoop=requestAnimationFrame(tick);
+  }
+  scanLoop=requestAnimationFrame(tick);
+}
+
+function onBarcodeDetected(code){
+  if(navigator.vibrate) navigator.vibrate(120);
+  const found=state.items.find(i=>(i.sku||'').trim()===code.trim());
+  const banner=document.getElementById('scan-result-banner');
+  const text=document.getElementById('scan-result-text');
+  if(found){
+    banner.classList.remove('notfound');
+    banner.classList.add('show');
+    text.textContent='✓ '+found.name+' · '+found.stock+' '+t('units');
+    setTimeout(()=>{
+      closeCamera();
+      state.selectedId=found.id;
+      renderInventario();
+      toast(t('toastDetected')+found.name);
+    },900);
+  } else {
+    banner.classList.add('show','notfound');
+    const notFound={es:'Código no encontrado: ',zh:'未找到条码：',en:'Code not found: ',fr:'Code introuvable : '};
+    text.textContent='⚠ '+(notFound[lang]||notFound.es)+code;
+    setTimeout(()=>{
+      closeCamera();
+      document.getElementById('f-sku').value=code;
+      switchView('anadir');
+      toast(t('toastCode')+code);
+    },1200);
+  }
+}
+
+function closeCamera(){
+  if(scanLoop){cancelAnimationFrame(scanLoop);scanLoop=null;}
+  scanLocked=false;
+  closeHtml5Scanner();
+  if(camStream){camStream.getTracks().forEach(tr=>tr.stop());camStream=null;}
+  document.getElementById('cam-modal').classList.remove('open');
+  document.getElementById('scan-overlay').style.display='none';
+  document.getElementById('scan-result-banner').classList.remove('show','notfound');
+}
+window.closeCamera=closeCamera;
+
+function capturePhoto(){
+  const video=document.getElementById('cam-video');
+  const canvas=document.getElementById('cam-canvas');
+  canvas.width=video.videoWidth||640; canvas.height=video.videoHeight||480;
+  canvas.getContext('2d').drawImage(video,0,0);
+  const dataUrl=canvas.toDataURL('image/jpeg',0.7);
+  if(state.camTarget==='merch'||state.camTarget==='merch-quick'){
+    state.photos.merch=dataUrl;
+    const box=document.getElementById('box-merch');
+    if(box){box.classList.add('done');box.innerHTML=`<img src="${dataUrl}" alt="">`;}
+    toast(t('toastPhoto'));
+    closeCamera();
+  } else if(state.camTarget==='barcode'){
+    state.photos.barcode=dataUrl;
+    const box=document.getElementById('box-barcode');
+    if(box){box.classList.add('done');box.innerHTML=`<img src="${dataUrl}" alt="">`;}
+    tryReadBarcode(dataUrl);
+    toast(t('toastPhoto'));
+    closeCamera();
+  } else if(state.camTarget==='scanner'){
+    tryReadBarcode(dataUrl);
+  }
+}
+window.capturePhoto=capturePhoto;
+
+function tryReadBarcode(dataUrl){
+  const img=new Image();
+  img.onload=()=>{
+    const canvas=document.createElement('canvas');
+    canvas.width=img.width; canvas.height=img.height;
+    canvas.getContext('2d').drawImage(img,0,0);
+    if('BarcodeDetector' in window){
+      new BarcodeDetector({formats:['ean_13','ean_8','code_128','code_39','qr_code','upc_a','upc_e']})
+        .detect(canvas).then(codes=>{
+          if(codes.length){
+            const code=codes[0].rawValue;
+            document.getElementById('f-sku').value=code;
+            toast(t('toastCode')+code);
+            if(state.camTarget==='scanner') onBarcodeDetected(code);
+          }
+        }).catch(()=>{});
+    }
+  };
+  img.src=dataUrl;
 }
 
 function openCamera(target){
@@ -1245,179 +1455,6 @@ function openScannerCamera(){
       const video=document.getElementById('cam-video');
       video.srcObject=stream;
       document.getElementById('cam-modal').classList.add('open');
-
-      video.onloadedmetadata=()=>{
-        // Intentar primero BarcodeDetector nativo (Chrome Android)
-        if('BarcodeDetector' in window){
-          startNativeScanLoop();
-        }
-        // Fallback: ZXing (funciona en Safari iOS)
-        else if(getZXing()){
-          startZXingScanLoop();
-        }
-        // Último recurso: botón manual
-        else {
-          document.getElementById('btn-capture').style.display='flex';
-          const noSupport={es:'Toca el botón para escanear',zh:'点击按钮扫描',en:'Tap button to scan',fr:'Appuyez pour scanner'};
-          document.getElementById('scan-hint-text').textContent=noSupport[lang]||noSupport.es;
-        }
-      };
-    })
-    .catch(()=>toast(t('camCancel')));
-}
-window.openScannerCamera=openScannerCamera;
-
-function startNativeScanLoop(){
-  const detector=new BarcodeDetector({formats:['ean_13','ean_8','code_128','code_39','qr_code','upc_a','upc_e']});
-  const video=document.getElementById('cam-video');
-  const canvas=document.getElementById('cam-canvas');
-  const ctx=canvas.getContext('2d');
-  function tick(){
-    if(!camStream||scanLocked) return;
-    if(video.readyState===video.HAVE_ENOUGH_DATA){
-      canvas.width=video.videoWidth; canvas.height=video.videoHeight;
-      ctx.drawImage(video,0,0);
-      detector.detect(canvas).then(codes=>{
-        if(codes.length&&!scanLocked){
-          scanLocked=true;
-          onBarcodeDetected(codes[0].rawValue);
-        }
-      }).catch(()=>{});
-    }
-    scanLoop=requestAnimationFrame(tick);
-  }
-  scanLoop=requestAnimationFrame(tick);
-}
-
-function startZXingScanLoop(){
-  const reader=getZXing();
-  if(!reader) return;
-  const video=document.getElementById('cam-video');
-  const canvas=document.getElementById('cam-canvas');
-  const ctx=canvas.getContext('2d');
-
-  function tick(){
-    if(!camStream||scanLocked) return;
-    if(video.readyState===video.HAVE_ENOUGH_DATA){
-      canvas.width=video.videoWidth||640;
-      canvas.height=video.videoHeight||480;
-      ctx.drawImage(video,0,0);
-      try{
-        const imageData=ctx.getImageData(0,0,canvas.width,canvas.height);
-        const luminanceSource=new ZXing.HTMLCanvasElementLuminanceSource(canvas);
-        const binaryBitmap=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
-        const result=reader.decodeBitmap(binaryBitmap);
-        if(result&&!scanLocked){
-          scanLocked=true;
-          onBarcodeDetected(result.getText());
-          return;
-        }
-      } catch(e){ /* no code found, keep trying */ }
-    }
-    scanLoop=requestAnimationFrame(tick);
-  }
-  scanLoop=requestAnimationFrame(tick);
-}
-
-function onBarcodeDetected(code){
-  if(navigator.vibrate) navigator.vibrate(120);
-  const found=state.items.find(i=>(i.sku||'').trim()===code.trim());
-  const banner=document.getElementById('scan-result-banner');
-  const text=document.getElementById('scan-result-text');
-  if(found){
-    banner.classList.remove('notfound');
-    banner.classList.add('show');
-    text.textContent='✓ '+found.name+' · '+found.stock+' '+t('units');
-    setTimeout(()=>{
-      closeCamera();
-      state.selectedId=found.id;
-      renderInventario();
-      toast(t('toastDetected')+found.name);
-    },900);
-  } else {
-    banner.classList.add('show','notfound');
-    const notFound={es:'Código no encontrado: ',zh:'未找到条码：',en:'Code not found: ',fr:'Code introuvable : '};
-    text.textContent='⚠ '+(notFound[lang]||notFound.es)+code;
-    setTimeout(()=>{
-      closeCamera();
-      document.getElementById('f-sku').value=code;
-      switchView('anadir');
-      toast(t('toastCode')+code);
-    },1200);
-  }
-}
-
-function closeCamera(){
-  if(scanLoop){cancelAnimationFrame(scanLoop);scanLoop=null;}
-  scanLocked=false;
-  if(zxingReader){try{zxingReader.reset();}catch(e){}}
-  if(camStream){camStream.getTracks().forEach(tr=>tr.stop());camStream=null;}
-  document.getElementById('cam-modal').classList.remove('open');
-  document.getElementById('scan-overlay').style.display='none';
-  document.getElementById('scan-result-banner').classList.remove('show','notfound');
-}
-window.closeCamera=closeCamera;
-
-function capturePhoto(){
-  const video=document.getElementById('cam-video');
-  const canvas=document.getElementById('cam-canvas');
-  canvas.width=video.videoWidth||640; canvas.height=video.videoHeight||480;
-  canvas.getContext('2d').drawImage(video,0,0);
-  const dataUrl=canvas.toDataURL('image/jpeg',0.7);
-  if(state.camTarget==='merch'||state.camTarget==='merch-quick'){
-    state.photos.merch=dataUrl;
-    const box=document.getElementById('box-merch');
-    if(box){box.classList.add('done');box.innerHTML=`<img src="${dataUrl}" alt="">`;}
-    toast(t('toastPhoto'));
-    closeCamera();
-  } else if(state.camTarget==='barcode'){
-    state.photos.barcode=dataUrl;
-    const box=document.getElementById('box-barcode');
-    if(box){box.classList.add('done');box.innerHTML=`<img src="${dataUrl}" alt="">`;}
-    tryReadBarcode(dataUrl);
-    toast(t('toastPhoto'));
-    closeCamera();
-  } else if(state.camTarget==='scanner'){
-    tryReadBarcode(dataUrl);
-  }
-}
-window.capturePhoto=capturePhoto;
-
-function tryReadBarcode(dataUrl){
-  const img=new Image();
-  img.onload=()=>{
-    const canvas=document.createElement('canvas');
-    canvas.width=img.width; canvas.height=img.height;
-    canvas.getContext('2d').drawImage(img,0,0);
-    // Intentar nativo primero
-    if('BarcodeDetector' in window){
-      new BarcodeDetector({formats:['ean_13','ean_8','code_128','code_39','qr_code','upc_a','upc_e']})
-        .detect(canvas).then(codes=>{
-          if(codes.length){
-            const code=codes[0].rawValue;
-            document.getElementById('f-sku').value=code;
-            toast(t('toastCode')+code);
-            if(state.camTarget==='scanner') onBarcodeDetected(code);
-          }
-        }).catch(()=>{});
-    }
-    // ZXing fallback
-    else if(getZXing()){
-      try{
-        const luminanceSource=new ZXing.HTMLCanvasElementLuminanceSource(canvas);
-        const binaryBitmap=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
-        const result=getZXing().decodeBitmap(binaryBitmap);
-        if(result){
-          const code=result.getText();
-          document.getElementById('f-sku').value=code;
-          toast(t('toastCode')+code);
-          if(state.camTarget==='scanner') onBarcodeDetected(code);
-        }
-      } catch(e){}
-    }
-  };
-  img.src=dataUrl;
-}
 
 function toast(msg){
   const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');
