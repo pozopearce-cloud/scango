@@ -1333,4 +1333,11 @@ function escHtml(str){
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-document.getElementById('stock-modal').addEventListener('
+document.getElementById('stock-modal').addEventListener('click', function(e){ if(e.target===this) closeModal(); });
+
+// ── INIT ─────────────────────────────────────────────────────
+checkRegistration();
+
+</script>
+</body>
+</html>
